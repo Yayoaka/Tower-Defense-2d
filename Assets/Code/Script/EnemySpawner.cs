@@ -13,18 +13,22 @@ public class EnemySpawner : MonoBehaviour
     [SerializeField] private GameObject[] enemyPrefabs;
 
     [Header("Attribute")]
-    [SerializeField] private int baseEnemies = 8;
-    [SerializeField] private float enemiePerSecond = 0.5f;
+    [SerializeField] private int baseEnemies = 6;
+    [SerializeField] private float enemiePerSecond = 1f;
     [SerializeField] private float timeBetweenWaves = 5f;
-    [SerializeField] private float difficultyScalingFactor = 0.75f;
+    [SerializeField] private float difficultyScalingFactor = 0.9f;
+    [SerializeField] private float enemiesPerSecondCap = 15f;
+    [SerializeField] private float hpScale = 1.1f;
 
     [Header("Events")]
     public static UnityEvent onEnemyDestroy = new UnityEvent();
 
-    private int currentWave = 1;
+    public static int currentWave = 1;
+
     private float timeSinceLastSpawn;
     private int enemiesAlive;
     private int enemiesLeftToSpawn;
+    private float eps;
     private bool isSpawning = false;
 
     private void Awake()
@@ -39,9 +43,11 @@ public class EnemySpawner : MonoBehaviour
 
     private void Update()
     {
+        if (!isSpawning) return;
+
         timeSinceLastSpawn += Time.deltaTime;
 
-        if (timeSinceLastSpawn >= (1f / enemiePerSecond) && enemiesLeftToSpawn > 0)
+        if (timeSinceLastSpawn >= (1f / eps) && enemiesLeftToSpawn > 0)
         {
             SpawnEnemy();
             enemiesLeftToSpawn--;
@@ -57,6 +63,7 @@ public class EnemySpawner : MonoBehaviour
 
     private void EnemyDestroy()
     {
+        LevelManager.kills++;
         enemiesAlive--;
     }
 
@@ -65,25 +72,43 @@ public class EnemySpawner : MonoBehaviour
         yield return new WaitForSeconds(timeBetweenWaves);
 
         isSpawning = true;
-        enemiesLeftToSpawn = baseEnemies;
+        enemiesLeftToSpawn = EnemiesPerWave();
+        eps = EnemiesPerSecond();
     }
 
     private void EndWave()
     {
         isSpawning = false;
-        timeSinceLastSpawn = 0f;
         currentWave++;
+
+        if (currentWave > 20)
+        {
+            LevelManager.main.WinGame();
+        }
         StartCoroutine(StartWave());
     }
 
     private void SpawnEnemy()
     {
-        GameObject prefabToSpawn = enemyPrefabs[0];
-        Instantiate(prefabToSpawn, LevelManager.main.startPoint.position, Quaternion.identity);
+        int index = UnityEngine.Random.Range(0, enemyPrefabs.Length);
+        GameObject prefabToSpawn = enemyPrefabs[index];
+        GameObject enemyObject = Instantiate(prefabToSpawn, LevelManager.main.startPoint.position, Quaternion.identity);
+
+        Health enemyHealth = enemyObject.GetComponent<Health>();
+        if (enemyHealth != null)
+        {
+            enemyHealth.hitPoints = Mathf.RoundToInt(enemyHealth.hitPoints * Mathf.Pow(hpScale, currentWave - 1));
+        }
     }
 
+
     private int EnemiesPerWave()
+        {
+            return Mathf.RoundToInt(baseEnemies * Mathf.Pow(currentWave, difficultyScalingFactor));
+        }
+
+    private float EnemiesPerSecond()
     {
-        return Mathf.RoundToInt(baseEnemies * Mathf.Pow(currentWave, difficultyScalingFactor));
+        return Mathf.Clamp(enemiePerSecond * Mathf.Pow(currentWave, difficultyScalingFactor), 0, enemiesPerSecondCap);
     }
 }
